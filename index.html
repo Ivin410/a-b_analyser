@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A/B Test Analyzer — Statistical significance, made legible</title>
+<meta name="description" content="A Streamlit tool for analyzing A/B tests with frequentist and Bayesian statistics — conversion rates, continuous metrics, sample size planning.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B1120;
+    --ink-2:#111A2E;
+    --paper:#F4F4F0;
+    --paper-dim:#C7CCD8;
+    --line:#26314A;
+    --control:#94a3b8;
+    --variant:#6366f1;
+    --variant-soft:#818cf8;
+    --signal:#22c55e;
+    --warn:#ef4444;
+    --mono:'JetBrains Mono', ui-monospace, monospace;
+    --sans:'Inter', system-ui, sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--ink);
+    color:var(--paper);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
+  }
+
+  a{color:inherit;}
+  ::selection{background:var(--variant); color:white;}
+
+  /* ---------- Layout shells ---------- */
+  .wrap{max-width:1080px; margin:0 auto; padding:0 28px;}
+  section{padding:88px 0;}
+  @media (max-width:720px){ section{padding:56px 0;} }
+
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12.5px;
+    letter-spacing:0.14em;
+    text-transform:uppercase;
+    color:var(--variant-soft);
+    display:flex; align-items:center; gap:10px;
+    margin:0 0 18px 0;
+  }
+  .eyebrow::before{
+    content:"";
+    width:7px; height:7px; border-radius:50%;
+    background:var(--signal);
+    box-shadow:0 0 0 3px rgba(34,197,94,0.18);
+    flex:none;
+  }
+
+  h1,h2,h3{font-family:var(--sans); font-weight:800; letter-spacing:-0.02em; margin:0;}
+  p{color:var(--paper-dim); margin:0;}
+  code, .mono{font-family:var(--mono);}
+
+  /* ---------- Top nav ---------- */
+  header.nav{
+    position:sticky; top:0; z-index:50;
+    background:rgba(11,17,32,0.86);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .nav-inner{
+    max-width:1080px; margin:0 auto; padding:16px 28px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px;
+    font-family:var(--mono); font-weight:700; font-size:14.5px;
+    text-decoration:none; color:var(--paper);
+  }
+  .brand .dot-pair{display:flex; gap:3px;}
+  .brand .dot-pair span{width:7px; height:7px; border-radius:50%; display:block;}
+  .brand .dot-pair span:first-child{background:var(--control);}
+  .brand .dot-pair span:last-child{background:var(--variant);}
+  .nav-links{display:flex; gap:28px; align-items:center; font-size:14px;}
+  .nav-links a{text-decoration:none; color:var(--paper-dim); transition:color .15s;}
+  .nav-links a:hover{color:var(--paper);}
+  .nav-cta{
+    background:var(--variant); color:white !important;
+    padding:8px 16px; border-radius:7px;
+    font-weight:600; font-size:13.5px;
+    transition:background .15s, transform .15s;
+  }
+  .nav-cta:hover{background:var(--variant-soft); transform:translateY(-1px);}
+  @media (max-width:640px){ .nav-links a:not(.nav-cta){display:none;} }
+
+  /* ---------- Hero ---------- */
+  .hero{padding:96px 0 64px 0;}
+  .hero-grid{
+    display:grid;
+    grid-template-columns:1.05fr 0.95fr;
+    gap:56px;
+    align-items:center;
+  }
+  @media (max-width:880px){
+    .hero-grid{grid-template-columns:1fr; gap:48px;}
+    .hero{padding-top:48px;}
+  }
+
+  .hero h1{
+    font-size:clamp(34px, 5vw, 52px);
+    line-height:1.08;
+  }
+  .hero h1 em{
+    font-style:normal;
+    background:linear-gradient(180deg, var(--variant-soft), var(--variant));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
+  .hero p.lede{
+    font-size:17px;
+    color:var(--paper-dim);
+    margin-top:20px;
+    max-width:46ch;
+  }
+
+  .hero-ctas{display:flex; gap:12px; margin-top:32px; flex-wrap:wrap;}
+  .btn{
+    font-family:var(--sans); font-weight:700; font-size:14.5px;
+    padding:13px 22px; border-radius:8px;
+    text-decoration:none;
+    display:inline-flex; align-items:center; gap:8px;
+    transition:transform .15s, background .15s, border-color .15s;
+    border:1px solid transparent;
+    cursor:pointer;
+  }
+  .btn-primary{background:var(--paper); color:var(--ink);}
+  .btn-primary:hover{transform:translateY(-2px); background:#fff;}
+  .btn-ghost{border-color:var(--line); color:var(--paper);}
+  .btn-ghost:hover{border-color:var(--variant-soft); transform:translateY(-2px);}
+
+  .hero-meta{
+    margin-top:28px;
+    display:flex; gap:22px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:12.5px; color:var(--paper-dim);
+  }
+  .hero-meta span{display:flex; align-items:center; gap:7px;}
+  .hero-meta b{color:var(--paper); font-weight:600;}
+
+  /* ---------- Hero visual: live test card ---------- */
+  .test-card{
+    background:var(--ink-2);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:22px 22px 18px 22px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.5);
+  }
+  .test-card-head{
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--mono); font-size:11.5px; color:var(--paper-dim);
+    margin-bottom:14px;
+    text-transform:uppercase; letter-spacing:0.08em;
+  }
+  .test-card-head .pulse{
+    display:flex; align-items:center; gap:6px; color:var(--signal);
+  }
+  .test-card-head .pulse i{
+    width:6px; height:6px; border-radius:50%; background:var(--signal);
+    display:block;
+    animation:pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+
+  svg#heroChart{width:100%; height:auto; display:block;}
+
+  .test-card-legend{
+    display:flex; gap:20px; margin-top:10px;
+    font-family:var(--mono); font-size:12px; color:var(--paper-dim);
+  }
+  .test-card-legend span{display:flex; align-items:center; gap:7px;}
+  .test-card-legend i{width:9px; height:9px; border-radius:2px; display:block;}
+  .leg-control{background:var(--control);}
+  .leg-variant{background:var(--variant);}
+
+  .test-card-verdict{
+    margin-top:16px; padding-top:16px;
+    border-top:1px dashed var(--line);
+    font-family:var(--mono); font-size:13px;
+    display:flex; justify-content:space-between; align-items:baseline;
+  }
+  .test-card-verdict b{color:var(--signal); font-size:20px;}
+
+  /* ---------- Section heads ---------- */
+  .section-head{max-width:62ch; margin-bottom:44px;}
+  .section-head h2{font-size:clamp(26px,3.4vw,34px);}
+  .section-head p{margin-top:14px; font-size:16px;}
+
+  /* ---------- "What is this" cards ---------- */
+  .grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
+  @media (max-width:780px){ .grid-3{grid-template-columns:1fr;} }
+  .feature-card{
+    background:var(--ink-2);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:24px;
+  }
+  .feature-card .ic{
+    width:34px; height:34px; border-radius:8px;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(99,102,241,0.14);
+    margin-bottom:16px;
+  }
+  .feature-card h3{font-size:16.5px; margin-bottom:8px;}
+  .feature-card p{font-size:14.5px;}
+
+  /* ---------- How it works — numbered flow ---------- */
+  .flow{
+    border-left:1px solid var(--line);
+    margin-left:14px;
+    padding-left:0;
+  }
+  .flow-step{
+    position:relative;
+    padding:0 0 40px 36px;
+  }
+  .flow-step:last-child{padding-bottom:0;}
+  .flow-step::before{
+    content:attr(data-n);
+    position:absolute; left:-14.5px; top:0;
+    width:28px; height:28px; border-radius:50%;
+    background:var(--ink);
+    border:1px solid var(--variant-soft);
+    color:var(--variant-soft);
+    font-family:var(--mono); font-weight:700; font-size:12px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .flow-step h3{font-size:17px; margin-bottom:6px;}
+  .flow-step p{font-size:14.5px; max-width:58ch;}
+  .flow-step .codebox{
+    margin-top:12px;
+    background:var(--ink);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:13px 16px;
+    font-family:var(--mono);
+    font-size:13px;
+    color:var(--paper-dim);
+    overflow-x:auto;
+    white-space:pre;
+  }
+  .flow-step .codebox .c1{color:var(--variant-soft);}
+  .flow-step .codebox .c2{color:var(--signal);}
+
+  /* ---------- Mode comparison ---------- */
+  .compare{
+    display:grid; grid-template-columns:1fr 1fr; gap:18px;
+  }
+  @media (max-width:720px){ .compare{grid-template-columns:1fr;} }
+  .compare-card{
+    border:1px solid var(--line); border-radius:12px;
+    padding:24px; background:var(--ink-2);
+  }
+  .compare-card.is-bayes{border-color:rgba(99,102,241,0.4);}
+  .compare-card h3{
+    font-family:var(--mono); font-size:13px; text-transform:uppercase;
+    letter-spacing:0.08em; color:var(--paper-dim); margin-bottom:14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .compare-card h3 i{width:7px;height:7px;border-radius:50%;display:block;}
+  .compare-card.is-bayes h3 i{background:var(--variant);}
+  .compare-card:not(.is-bayes) h3 i{background:var(--control);}
+  .compare-card .headline{font-size:20px; font-weight:700; margin-bottom:10px;}
+  .compare-card ul{margin:14px 0 0 0; padding:0; list-style:none;}
+  .compare-card li{
+    font-size:14px; color:var(--paper-dim);
+    padding:8px 0; border-top:1px solid var(--line);
+  }
+  .compare-card li:first-child{border-top:none;}
+  .compare-card li b{color:var(--paper); font-weight:600;}
+
+  /* ---------- Use-case strip ---------- */
+  .usecases{
+    display:flex; gap:14px; overflow-x:auto; padding-bottom:8px;
+    scrollbar-width:thin;
+  }
+  .usecase-pill{
+    flex:none;
+    background:var(--ink-2); border:1px solid var(--line);
+    border-radius:10px; padding:16px 18px;
+    width:220px;
+    font-size:13.5px; color:var(--paper-dim);
+  }
+  .usecase-pill .tag{
+    font-family:var(--mono); font-size:11px; color:var(--signal);
+    text-transform:uppercase; letter-spacing:0.06em;
+    display:block; margin-bottom:8px;
+  }
+
+  /* ---------- Deploy section ---------- */
+  .deploy-grid{
+    display:grid; grid-template-columns:1fr 1fr; gap:18px;
+  }
+  @media (max-width:720px){ .deploy-grid{grid-template-columns:1fr;} }
+  .deploy-card{
+    border:1px solid var(--line); border-radius:12px; padding:26px;
+    background:linear-gradient(180deg, var(--ink-2), rgba(17,26,46,0.4));
+  }
+  .deploy-card h3{font-size:18px; margin-bottom:10px;}
+  .deploy-card p{font-size:14.5px; margin-bottom:16px;}
+  .deploy-card .codebox{
+    background:var(--ink); border:1px solid var(--line); border-radius:8px;
+    padding:14px 16px; font-family:var(--mono); font-size:12.5px;
+    color:var(--paper-dim); white-space:pre; overflow-x:auto;
+  }
+  .deploy-card .codebox .c1{color:var(--variant-soft);}
+
+  /* ---------- FAQ ---------- */
+  details{
+    border-bottom:1px solid var(--line);
+    padding:18px 0;
+  }
+  details summary{
+    cursor:pointer;
+    font-weight:600; font-size:15.5px;
+    list-style:none;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  details summary::-webkit-details-marker{display:none;}
+  details summary::after{
+    content:"+";
+    font-family:var(--mono); color:var(--variant-soft); font-size:20px;
+    transition:transform .2s;
+  }
+  details[open] summary::after{transform:rotate(45deg);}
+  details p{margin-top:12px; font-size:14.5px; max-width:64ch;}
+
+  /* ---------- Footer ---------- */
+  footer{
+    border-top:1px solid var(--line);
+    padding:40px 0;
+  }
+  .footer-inner{
+    display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:16px;
+    font-family:var(--mono); font-size:12.5px; color:var(--paper-dim);
+  }
+  footer a{text-decoration:none; color:var(--paper-dim); transition:color .15s;}
+  footer a:hover{color:var(--paper);}
+
+  /* generic fade-up on scroll */
+  .reveal{opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease;}
+  .reveal.is-visible{opacity:1; transform:translateY(0);}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="#top" class="brand">
+      <span class="dot-pair"><span></span><span></span></span>
+      ab-test-analyzer
+    </a>
+    <nav class="nav-links">
+      <a href="#what">What it is</a>
+      <a href="#how">How to use</a>
+      <a href="#modes">Modes</a>
+      <a href="#deploy">Run it</a>
+      <a href="https://github.com/YOUR_USERNAME/ab-test-analyzer" class="nav-cta" id="ghLink">View on GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ===================== HERO ===================== -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <p class="eyebrow">Open source · Streamlit · Python</p>
+        <h1>Know if your variant <em>actually</em> won —<br>before you ship it.</h1>
+        <p class="lede">
+          A web app that runs the statistics so you don't redo the same z-test in a notebook every
+          time an experiment finishes. Conversion rates, revenue, session time — frequentist or
+          Bayesian, your call.
+        </p>
+        <div class="hero-ctas">
+          <a href="#deploy" class="btn btn-primary">Run it locally</a>
+          <a href="#what" class="btn btn-ghost">See what it does ↓</a>
+        </div>
+        <div class="hero-meta">
+          <span>📦 <b>~500 lines</b> of Python</span>
+          <span>✅ <b>25</b> unit tests</span>
+          <span>🪪 <b>MIT</b> licensed</span>
+        </div>
+      </div>
+
+      <div class="test-card reveal" id="heroCard">
+        <div class="test-card-head">
+          <span>conversion_test.run()</span>
+          <span class="pulse"><i></i> sampling posterior</span>
+        </div>
+        <svg id="heroChart" viewBox="0 0 460 200" xmlns="http://www.w3.org/2000/svg">
+          <!-- populated / animated by script -->
+        </svg>
+        <div class="test-card-legend">
+          <span><i class="leg-control"></i> control · 10.2%</span>
+          <span><i class="leg-variant"></i> variant · 13.4%</span>
+        </div>
+        <div class="test-card-verdict">
+          <span>P(variant&nbsp;&gt;&nbsp;control)</span>
+          <b id="probReadout">97.8%</b>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WHAT IS THIS ===================== -->
+  <section id="what">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">What this is</p>
+        <h2>One tool for the math you do after every experiment.</h2>
+        <p>
+          If you run product, marketing, or growth experiments, you already know the drill: an
+          experiment finishes, and now someone needs to figure out whether the difference is real
+          or just noise. This app does that — with the right test for your data type, real
+          confidence intervals, and a plain-language verdict instead of a bare p-value.
+        </p>
+      </div>
+
+      <div class="grid-3">
+        <div class="feature-card reveal">
+          <div class="ic">📊</div>
+          <h3>Two ways to test significance</h3>
+          <p>Classic frequentist tests (z-test, Welch's t-test) alongside a Bayesian mode that gives you a direct probability instead of a p-value.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="ic">🧮</div>
+          <h3>Plans your sample size too</h3>
+          <p>Before you launch, find out how many users per group you actually need to detect the lift you care about.</p>
+        </div>
+        <div class="feature-card reveal">
+          <div class="ic">📁</div>
+          <h3>CSV in, verdict out</h3>
+          <p>Type numbers in by hand for a quick check, or upload a CSV export straight from your database or analytics tool.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MODES COMPARISON ===================== -->
+  <section id="modes">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Two approaches, one answer</p>
+        <h2>Frequentist or Bayesian — pick what your team speaks.</h2>
+        <p>Both modes are statistically sound. They just phrase the conclusion differently — and the app supports both so you're not locked into one.</p>
+      </div>
+
+      <div class="compare">
+        <div class="compare-card reveal">
+          <h3><i></i> Frequentist mode</h3>
+          <div class="headline">"p = 0.03"</div>
+          <p style="font-size:14.5px;">Answers: <i>how surprising would this data be if there were truly no difference?</i></p>
+          <ul>
+            <li><b>Conversion:</b> two-proportion z-test</li>
+            <li><b>Continuous:</b> Welch's t-test (unequal variance safe)</li>
+            <li><b>Also reports:</b> confidence interval, statistical power, Cohen's d</li>
+            <li><b>Good for:</b> regulated industries, academic-style reporting, teams already fluent in p-values</li>
+          </ul>
+        </div>
+        <div class="compare-card is-bayes reveal">
+          <h3><i></i> Bayesian mode</h3>
+          <div class="headline">"92% chance B wins"</div>
+          <p style="font-size:14.5px;">Answers: <i>how likely is it that the variant is actually better?</i> — directly.</p>
+          <ul>
+            <li><b>Conversion:</b> Beta-Binomial conjugate model (exact, instant)</li>
+            <li><b>Continuous:</b> Bayesian bootstrap (no normality assumption)</li>
+            <li><b>Also reports:</b> credible interval, expected uplift, posterior charts</li>
+            <li><b>Good for:</b> stakeholder-facing readouts, product/growth teams, intuitive go/no-go calls</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HOW TO USE ===================== -->
+  <section id="how">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">How to use it</p>
+        <h2>From repo to result in under five minutes.</h2>
+      </div>
+
+      <div class="flow">
+        <div class="flow-step reveal" data-n="1">
+          <h3>Install the dependencies</h3>
+          <p>Everything the app needs is pinned in <code>requirements.txt</code> — Streamlit for the interface, pandas/numpy/scipy for the math, Plotly for the charts.</p>
+          <div class="codebox"><span class="c1">pip</span> install -r requirements.txt</div>
+        </div>
+
+        <div class="flow-step reveal" data-n="2">
+          <h3>Launch the app</h3>
+          <p>This starts a local web server and opens the analyzer in your browser — nothing gets sent anywhere, it all runs on your machine.</p>
+          <div class="codebox"><span class="c1">streamlit</span> run app.py</div>
+        </div>
+
+        <div class="flow-step reveal" data-n="3">
+          <h3>Choose your test type</h3>
+          <p>In the sidebar: pick <b>Frequentist</b> or <b>Bayesian</b>, then choose <b>Conversion Rate</b> (binary: clicked / didn't), <b>Continuous Metric</b> (a number per user, like revenue), or <b>Sample Size Calculator</b> if you haven't launched the test yet.</p>
+        </div>
+
+        <div class="flow-step reveal" data-n="4">
+          <h3>Enter your data</h3>
+          <p>Type in totals manually for a quick gut-check, or upload a CSV. For conversion tests, the CSV needs a <code>group</code> column (control/variant) and a <code>converted</code> column (0 or 1). For continuous metrics, swap <code>converted</code> for <code>value</code>.</p>
+          <div class="codebox">group,converted
+<span class="c2">control</span>,0
+<span class="c2">control</span>,1
+<span class="c2">variant</span>,1</div>
+        </div>
+
+        <div class="flow-step reveal" data-n="5">
+          <h3>Read the verdict</h3>
+          <p>Click <b>Run Analysis</b>. You'll get the headline numbers, a chart, and a plain-language recommendation — ship it, hold off, or collect more data — plus an expandable explanation of exactly what the statistics mean.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== USE CASES ===================== -->
+  <section>
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Where it fits</p>
+        <h2>Built for the experiments analysts actually run.</h2>
+      </div>
+      <div class="usecases reveal">
+        <div class="usecase-pill"><span class="tag">Conversion</span>Did the new checkout flow increase purchase rate?</div>
+        <div class="usecase-pill"><span class="tag">Conversion</span>Does the redesigned signup form convert better?</div>
+        <div class="usecase-pill"><span class="tag">Continuous</span>Did the recommendation algorithm raise average order value?</div>
+        <div class="usecase-pill"><span class="tag">Continuous</span>Is the new onboarding shortening time-to-first-action?</div>
+        <div class="usecase-pill"><span class="tag">Planning</span>How long do I need to run this test to trust the result?</div>
+        <div class="usecase-pill"><span class="tag">Bayesian</span>What's a stakeholder-friendly way to report "no clear winner yet"?</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DEPLOY ===================== -->
+  <section id="deploy">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Run it your way</p>
+        <h2>Local for one person, hosted for the whole team.</h2>
+      </div>
+
+      <div class="deploy-grid">
+        <div class="deploy-card reveal">
+          <h3>🖥️ Run locally</h3>
+          <p>Best for trying it out or analyzing data you don't want leaving your machine.</p>
+          <div class="codebox">git clone &lt;your-repo-url&gt;
+<span class="c1">cd</span> ab-test-analyzer
+pip install -r requirements.txt
+streamlit run app.py</div>
+        </div>
+        <div class="deploy-card reveal">
+          <h3>☁️ Deploy to Streamlit Cloud</h3>
+          <p>Free hosting, one click from a GitHub repo. The config is already in the project.</p>
+          <div class="codebox">1. Push this repo to GitHub
+2. <span class="c1">share.streamlit.io</span> → New app
+3. Pick the repo + app.py
+4. Deploy</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FAQ ===================== -->
+  <section>
+    <div class="wrap" style="max-width:760px;">
+      <div class="section-head reveal">
+        <p class="eyebrow">Questions</p>
+        <h2>A few things worth knowing.</h2>
+      </div>
+
+      <div class="reveal">
+        <details open>
+          <summary>Does any of my data leave my computer?</summary>
+          <p>No. Streamlit runs entirely on whatever machine you launch it on — local laptop, your own server, or your Streamlit Cloud account. There's no external API call in the statistics code itself.</p>
+        </details>
+        <details>
+          <summary>Which mode should I trust — frequentist or Bayesian?</summary>
+          <p>Both are mathematically valid; they just answer slightly different questions and report the answer differently. If your organization already reports p-values, stick with frequentist for consistency. If you want a number that's easier to explain in a meeting ("87% chance B wins"), use Bayesian. The app runs both off the same input data, so you can always sanity-check one against the other.</p>
+        </details>
+        <details>
+          <summary>What if I don't have a CSV — can I just type in totals?</summary>
+          <p>Yes. Both conversion and continuous modes support manual entry — just the visitor/conversion counts, or pasted-in numbers for continuous metrics.</p>
+        </details>
+        <details>
+          <summary>Is this a replacement for a real statistician?</summary>
+          <p>No — think of it as a fast, correct first pass. It won't catch issues like sample ratio mismatch, novelty effects, or seasonality on its own; that context still needs a human who knows the experiment.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <span>A/B Test Analyzer · MIT License</span>
+    <span>Built with Streamlit · scipy · pandas · plotly</span>
+  </div>
+</footer>
+
+<script>
+  // ---------- Reveal-on-scroll ----------
+  const revealEls = document.querySelectorAll('.reveal');
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting){
+        e.target.classList.add('is-visible');
+        io.unobserve(e.target);
+      }
+    });
+  }, {threshold:0.12});
+  revealEls.forEach(el => io.observe(el));
+
+  // ---------- Hero chart: two animated posterior-style curves separating ----------
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById('heroChart');
+  const W = 460, H = 200, baseline = 168;
+
+  function gaussianPath(mean, std, amp, color, n=80){
+    let d = `M 0 ${baseline}`;
+    const pts = [];
+    for(let i=0;i<=n;i++){
+      const x = (i/n) * W;
+      const xv = (x/W) * 30; // map to 0..30 conceptual range
+      const y = amp * Math.exp(-Math.pow(xv-mean,2)/(2*std*std));
+      pts.push([x, baseline - y]);
+    }
+    d += pts.map(p => ` L ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
+    d += ` L ${W} ${baseline} Z`;
+    return d;
+  }
+
+  function render(progress){
+    // progress: 0 -> curves overlapping, 1 -> curves separated (the "reveal")
+    svg.innerHTML = '';
+
+    const sep = 3 + progress * 6; // separation grows
+    const controlMean = 14 - sep/2;
+    const variantMean = 14 + sep/2;
+    const std = 3.2 - progress*0.4;
+
+    // baseline axis
+    const axis = document.createElementNS(svgNS,'line');
+    axis.setAttribute('x1', 0); axis.setAttribute('x2', W);
+    axis.setAttribute('y1', baseline); axis.setAttribute('y2', baseline);
+    axis.setAttribute('stroke', '#26314A'); axis.setAttribute('stroke-width', 1);
+    svg.appendChild(axis);
+
+    // control curve
+    const pathC = document.createElementNS(svgNS,'path');
+    pathC.setAttribute('d', gaussianPath(controlMean, std, 130, '#94a3b8'));
+    pathC.setAttribute('fill', 'rgba(148,163,184,0.16)');
+    pathC.setAttribute('stroke', '#94a3b8');
+    pathC.setAttribute('stroke-width', 1.6);
+    svg.appendChild(pathC);
+
+    // variant curve
+    const pathV = document.createElementNS(svgNS,'path');
+    pathV.setAttribute('d', gaussianPath(variantMean, std, 130, '#6366f1'));
+    pathV.setAttribute('fill', 'rgba(99,102,241,0.20)');
+    pathV.setAttribute('stroke', '#6366f1');
+    pathV.setAttribute('stroke-width', 1.8);
+    svg.appendChild(pathV);
+  }
+
+  // animate progress 0 -> 1 -> hold -> loop softly (breathing separation)
+  let t = 0;
+  function loop(){
+    t += 0.006;
+    const progress = (Math.sin(t) + 1) / 2; // 0..1 oscillation
+    render(0.35 + progress*0.65);
+    const prob = 88 + progress*10;
+    const readout = document.getElementById('probReadout');
+    if (readout) readout.textContent = prob.toFixed(1) + '%';
+    requestAnimationFrame(loop);
+  }
+  render(0.6);
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Repo link ----------
+  // ⚠️ EDIT THIS once you've pushed the project to GitHub:
+  const REPO_URL = "https://github.com/YOUR_USERNAME/ab-test-analyzer";
+  document.getElementById('ghLink').setAttribute('href', REPO_URL);
+</script>
+
+</body>
+</html>
